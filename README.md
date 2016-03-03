@@ -44,7 +44,7 @@ With respect to task E, this code implements a novel quantification method _Adju
 If you use this code to produce results for a paper please insert this citation in your paper (the following paper is currently under review):
 
 Andrea Esuli,
-_"ISTI-CNR: Quantification on an Ordinal Scale"_
+_"ISTI-CNR at SemEval-2016 Task 4: Quantification on an Ordinal Scale"_
 Proceedings of the 10th International Workshop on Semantic Evaluation, SemEval '16,
 Association for Computational Linguistics
 
