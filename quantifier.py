@@ -30,6 +30,7 @@ import argparse
 import logging
 from multiprocessing.pool import Pool
 
+from sklearn.model_selection import StratifiedKFold, KFold
 from sklearn.pipeline import Pipeline
 from sklearn.feature_extraction.text import TfidfTransformer, CountVectorizer
 from sklearn.feature_selection import SelectKBest, chi2
@@ -41,7 +42,7 @@ from read_semeval_sentiment import read_semeval_quantification_classification
 
 
 class Quantifier(object):
-    def __init__(self, clf=None, reference_label=None, n_folds=50, seed=0):
+    def __init__(self, clf=None, reference_label=None, n_folds=10, seed=0):
         if clf is None:
             self._clf = svm.SVC(kernel='linear', probability=True)
         else:
@@ -70,31 +71,27 @@ class Quantifier(object):
             raise Exception("Reference label does not appear in training data")
 
         if min_count >= self._n_folds:
-            cv = cross_validation.StratifiedKFold(y, n_folds=min(X.shape[0], self._n_folds), shuffle=True,
+            cv = StratifiedKFold(y, n_folds=min(X.shape[0], self._n_folds), shuffle=True,
                                                   random_state=self._seed)
         else:
-            cv = cross_validation.KFold(X.shape[0], n_folds=min(X.shape[0], self._n_folds), shuffle=True,
+            cv = KFold(X.shape[0], n_folds=min(X.shape[0], self._n_folds), shuffle=True,
                                         random_state=self._seed)
 
         tp = 0
         fp = 0
         ptp = 0
-        pfn = 0
         pfp = 0
-        ptn = 0
 
         pool = Pool(processes=10)
         requests = list()
         for train_cv, test_cv in cv:
             requests.append((X, y, train_cv, test_cv))
 
-        for tp, fp, ptp, pfn, pfp, ptn in pool.map(self._fit_fold, requests):
-            tp += tp
-            fp += fp
-            ptp += ptp
-            pfn += ptn
-            pfp += pfp
-            ptn += ptn
+        for fold_tp, fold_fp, fold_ptp, fold_pfp in pool.map(self._fit_fold, requests):
+            tp += fold_tp
+            fp += fold_fp
+            ptp += fold_ptp
+            pfp += fold_pfp
 
         pool.close()
 
@@ -102,8 +99,8 @@ class Quantifier(object):
         negatives = X.shape[0] - positives
         self._tpr = tp / positives
         self._fpr = fp / negatives
-        self._ptpr = ptp / (ptp + pfn)
-        self._pfpr = pfp / (pfp + ptn)
+        self._ptpr = ptp / positives
+        self._pfpr = pfp / negatives
         self._clf.fit(X, y)
         if self._clf.classes_[0] == self._min_label:
             self._pos_idx = 0
@@ -117,9 +114,7 @@ class Quantifier(object):
         tp = 0
         fp = 0
         ptp = 0
-        pfn = 0
         pfp = 0
-        ptn = 0
         train_X = X[train_cv]
         train_y = np.array([y[i] for i in train_cv])
         test_X = X[test_cv]
@@ -142,10 +137,7 @@ class Quantifier(object):
             if label == self._min_label:
                 ptp += proba[self._pos_idx]
                 pfp += proba[self._neg_idx]
-            else:
-                ptn += proba[self._neg_idx]
-                pfn += proba[self._pos_idx]
-        return tp, fp, ptp, pfn, pfp, ptn
+        return tp, fp, ptp, pfp
 
     def predict(self, X):
         observed = X.shape[0]
